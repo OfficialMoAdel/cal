@@ -1,3 +1,4 @@
+# Stage 1: Base builder
 FROM node:18 as builder
 
 WORKDIR /calcom
@@ -9,6 +10,7 @@ ARG NEXTAUTH_SECRET=secret
 ARG CALENDSO_ENCRYPTION_KEY=secret
 ARG MAX_OLD_SPACE_SIZE=4096
 ARG NEXT_PUBLIC_API_V2_URL
+ARG SKIP_DB_DEPLOY=true  # Add skip flag
 
 ENV NEXT_PUBLIC_WEBAPP_URL=http://NEXT_PUBLIC_WEBAPP_URL_PLACEHOLDER \
     NEXT_PUBLIC_API_V2_URL=$NEXT_PUBLIC_API_V2_URL \
@@ -31,16 +33,21 @@ COPY calcom/tests ./tests
 RUN yarn config set httpTimeout 1200000
 RUN npx turbo prune --scope=@calcom/web --docker
 RUN yarn install
-RUN yarn db-deploy
+
+# Conditional database migration
+RUN if [ "$SKIP_DB_DEPLOY" = "false" ]; then \
+    yarn db-deploy; \
+    else \
+    echo "Skipping database migrations during build"; \
+    fi
+
 RUN yarn --cwd packages/prisma seed-app-store
-# Build and make embed servable from web/public/embed folder
 RUN yarn --cwd packages/embeds/embed-core workspace @calcom/embed-core run build
 RUN yarn --cwd apps/web workspace @calcom/web run build
 
-# RUN yarn plugin import workspace-tools && \
-#     yarn workspaces focus --all --production
 RUN rm -rf node_modules/.cache .yarn/cache apps/web/.next/cache
 
+# Stage 2: Production builder
 FROM node:18 as builder-two
 
 WORKDIR /calcom
@@ -57,26 +64,25 @@ COPY --from=builder /calcom/apps/web ./apps/web
 COPY --from=builder /calcom/packages/prisma/schema.prisma ./prisma/schema.prisma
 COPY scripts scripts
 
-# Save value used during this build stage. If NEXT_PUBLIC_WEBAPP_URL and BUILT_NEXT_PUBLIC_WEBAPP_URL differ at
-# run-time, then start.sh will find/replace static values again.
 ENV NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL \
     BUILT_NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL
 
 RUN scripts/replace-placeholder.sh http://NEXT_PUBLIC_WEBAPP_URL_PLACEHOLDER ${NEXT_PUBLIC_WEBAPP_URL}
 
+# Final stage: Runner
 FROM node:18 as runner
-
 
 WORKDIR /calcom
 COPY --from=builder-two /calcom ./
 ARG NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
 ENV NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL \
-    BUILT_NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL
+    BUILT_NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL \
+    NODE_ENV=production
 
-ENV NODE_ENV production
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=30s --retries=5 \
     CMD wget --spider http://localhost:3000 || exit 1
 
-CMD ["/calcom/scripts/start.sh"]
+# Add database migration to runtime startup
+CMD ["sh", "-c", "yarn db-deploy && /calcom/scripts/start.sh"]

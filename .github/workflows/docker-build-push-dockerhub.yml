@@ -10,9 +10,31 @@ on:
     types: [completed]
   workflow_dispatch:
 
+env:
+  SKIP_DB_DEPLOY: "true" # Skip migrations during build
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: calendso
+  DATABASE_HOST: postgres
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
@@ -25,7 +47,6 @@ jobs:
       - name: Git submodule update
         run: git submodule update --init
 
-      # Enable ARM64 support
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -60,8 +81,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
-            NEXT_PUBLIC_WEBAPP_URL=${{ env.NEXT_PUBLIC_WEBAPP_URL }}
-            NEXT_PUBLIC_API_V2_URL=${{ env.NEXT_PUBLIC_API_V2_URL }}
+            SKIP_DB_DEPLOY=${{ env.SKIP_DB_DEPLOY }}
+            NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
+            NEXT_PUBLIC_API_V2_URL=http://localhost:5555/api/v2
             DATABASE_URL=postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@${{ env.DATABASE_HOST }}/${{ env.POSTGRES_DB }}
 
       - name: Image digest
