@@ -81,7 +81,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
-            SKIP_DB_DEPLOY=${{ env.SKIP_DB_DEPLOY }}
+            SKIP_DB_DEPLOY="false"
             NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
             NEXT_PUBLIC_API_V2_URL=http://localhost:5555/api/v2
             DATABASE_URL=postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@${{ env.DATABASE_HOST }}/${{ env.POSTGRES_DB }}
