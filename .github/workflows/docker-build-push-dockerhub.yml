@@ -1,17 +1,23 @@
 name: Build and Push Multi-Arch Docker Image
 
-on:
+'on':
   push:
-    branches: ["main"]
-    tags: ["v*"]
+    branches:
+      - main
+    tags:
+      - v*
   workflow_run:
-    workflows: ["Update Calendso"]
-    branches: [main]
-    types: [completed]
+    workflows:
+      - Update Calendso
+    branches:
+      - main
+    types:
+      - completed
   workflow_dispatch:
 
+    null
 env:
-  SKIP_DB_DEPLOY: "true" # Skip migrations during build
+  SKIP_DB_DEPLOY: 'true' # Skip migrations during build
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
   POSTGRES_DB: calendso
@@ -28,12 +34,9 @@ jobs:
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ env.POSTGRES_DB }}
         ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          - '5432:5432'
+        options: '--health-cmd pg_isready --health-interval 10s --health-timeout 5s
+          --health-retries 5'
 
     steps:
       - name: Free Disk Space
@@ -88,3 +91,13 @@ jobs:
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+Resources:
+  Certificate:
+    Type: AWS::ACMPCA::Certificate
+    Properties:
+      CertificateAuthorityArn: <String>
+      Validity:
+        Type: <String>
+        Value: <Double>
+      CertificateSigningRequest: <String>
+      SigningAlgorithm: <String>
